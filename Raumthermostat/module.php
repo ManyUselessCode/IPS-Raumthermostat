@@ -583,16 +583,22 @@ class Raumthermostat extends IPSModule
     }
 
     /**
-     * Name des Raums für Nachrichten: der Raumordner über dem Ordner "Logik",
-     * sonst der Ordner über der Instanz.
+     * Name des Raums für Nachrichten: der Raumordner über dem Ordner "Logik", auch
+     * wenn die Instanz in einem Unterordner von "Logik" liegt. Ohne "Logik" der
+     * Ordner über der Instanz.
      */
     private function Raumname(): string
     {
-        $eltern = IPS_GetParent($this->InstanceID);
-        if ($eltern > 0 && IPS_GetName($eltern) == 'Logik') {
-            $eltern = IPS_GetParent($eltern);
+        $id = IPS_GetParent($this->InstanceID);
+        while ($id > 0) {
+            if (IPS_GetName($id) == 'Logik') {
+                $raum = IPS_GetParent($id);
+                return IPS_GetName($raum > 0 ? $raum : $id);
+            }
+            $id = IPS_GetParent($id);
         }
-        return $eltern > 0 ? IPS_GetName($eltern) : IPS_GetName($this->InstanceID);
+        $eltern = IPS_GetParent($this->InstanceID);
+        return IPS_GetName($eltern > 0 ? $eltern : $this->InstanceID);
     }
 
     private function IstZentrale(int $id): bool
