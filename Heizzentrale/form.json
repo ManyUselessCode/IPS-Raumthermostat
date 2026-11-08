@@ -1,0 +1,22 @@
+{
+  "elements": [
+    {
+      "type": "SelectInstance",
+      "name": "VisualisierungID",
+      "caption": "Visualisierung für Push (optional)",
+      "validModules": ["{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}"]
+    },
+    {
+      "type": "Label",
+      "caption": "Kachel-Visualisierung, über die die Raumthermostate Push-Nachrichten schicken, zum Beispiel bei Fühlerausfall. Leer = keine Push-Nachrichten."
+    },
+    {
+      "type": "Label",
+      "caption": "Heizphase, Frostschutz, Urlaub und Urlaubs-Soll sind Variablen dieser Instanz und gelten für alle Raumthermostate."
+    }
+  ],
+  "actions": [],
+  "status": [
+    { "code": 201, "icon": "error", "caption": "Die eingestellte Visualisierung fehlt, siehe Log" }
+  ]
+}

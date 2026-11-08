@@ -1,0 +1,11 @@
+{
+  "id": "{3581511F-55BB-4D47-A922-CEA2D4118A59}",
+  "name": "Heizzentrale",
+  "type": 3,
+  "vendor": "",
+  "aliases": ["Heizung Zentrale", "Heizungszentrale"],
+  "parentRequirements": [],
+  "childRequirements": [],
+  "implemented": [],
+  "prefix": "HEIZZENTRALE"
+}

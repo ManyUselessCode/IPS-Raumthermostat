@@ -1,0 +1,12 @@
+{
+  "id": "{E45EF087-3C5D-4FD7-96B0-DE29FE24683C}",
+  "author": "KOSV",
+  "name": "IPS-Raumthermostat",
+  "url": "https://github.com/ManyUselessCode/IPS-Raumthermostat",
+  "compatibility": {
+    "version": "8.0"
+  },
+  "version": "1.0",
+  "build": 1,
+  "date": 1794171817
+}

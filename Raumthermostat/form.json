@@ -1,0 +1,81 @@
+{
+  "elements": [
+    {
+      "type": "SelectInstance",
+      "name": "ZentraleID",
+      "caption": "Heizzentrale",
+      "validModules": ["{3581511F-55BB-4D47-A922-CEA2D4118A59}"]
+    },
+    {
+      "type": "Label",
+      "caption": "Heizphase, Frostschutz, Urlaub und Urlaubs-Soll kommen aus der Heizzentrale und gelten für alle Räume."
+    },
+    { "type": "SelectVariable", "name": "IstID", "caption": "Ist-Temperatur (Variable)" },
+    { "type": "SelectInstance", "name": "VentilSchaltenID", "caption": "Ventil Schalten (Instanz)" },
+    { "type": "SelectVariable", "name": "VentilStatusID", "caption": "Ventil Status (Variable)" },
+    {
+      "type": "NumberSpinner",
+      "name": "Toleranz",
+      "caption": "Toleranz",
+      "suffix": "K",
+      "digits": 1,
+      "minimum": 0.1
+    },
+    {
+      "type": "Label",
+      "caption": "Das Ventil öffnet, wenn die Ist-Temperatur unter Soll minus Toleranz fällt, und schließt, wenn sie über Soll plus Toleranz steigt."
+    },
+    {
+      "type": "NumberSpinner",
+      "name": "FuehlerZeitgrenze",
+      "caption": "Fühler ausgefallen nach",
+      "suffix": "Minuten",
+      "minimum": 15
+    },
+    {
+      "type": "Label",
+      "caption": "Kommt so lange kein Messwert, gilt der Fühler als ausgefallen: Push-Nachricht, Heizen aus, Ventil zu. Der Fühler muss dafür zyklisch senden."
+    },
+    {
+      "type": "NumberSpinner",
+      "name": "UrlaubSoll",
+      "caption": "Abweichender Urlaubs-Soll",
+      "suffix": "°C",
+      "digits": 1,
+      "minimum": 0,
+      "maximum": 30
+    },
+    { "type": "Label", "caption": "0 = Urlaubs-Soll der Heizzentrale." },
+    {
+      "type": "ExpansionPanel",
+      "caption": "Fenster (optional)",
+      "items": [
+        {
+          "type": "List",
+          "name": "Fenster",
+          "caption": "Fensterkontakte (an = offen)",
+          "rowCount": 3,
+          "add": true,
+          "delete": true,
+          "columns": [
+            { "caption": "Kontakt (Variable)", "name": "VariableID", "width": "auto", "add": 0, "edit": { "type": "SelectVariable" } }
+          ]
+        },
+        {
+          "type": "NumberSpinner",
+          "name": "FensterVerzoegerung",
+          "caption": "Fenster offen ab",
+          "suffix": "Minuten",
+          "minimum": 0
+        },
+        { "type": "Label", "caption": "So lange muss ein Fenster offen sein, bevor der Raum auf Frostschutz geht." }
+      ]
+    }
+  ],
+  "actions": [],
+  "status": [
+    { "code": 104, "icon": "inactive", "caption": "Ist-Temperatur, Ventil Schalten oder Ventil Status ist nicht eingestellt" },
+    { "code": 201, "icon": "error", "caption": "Eine eingestellte ID fehlt oder ist ungültig, siehe Log" },
+    { "code": 202, "icon": "error", "caption": "Keine Heizzentrale eingestellt" }
+  ]
+}

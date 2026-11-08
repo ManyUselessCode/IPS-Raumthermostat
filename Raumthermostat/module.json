@@ -1,0 +1,11 @@
+{
+  "id": "{4F60A2B3-95B5-4092-960D-E64FB6CAFE9E}",
+  "name": "Raumthermostat",
+  "type": 3,
+  "vendor": "",
+  "aliases": ["Raum-Thermostat", "Heizung Raum", "Thermostat"],
+  "parentRequirements": [],
+  "childRequirements": [],
+  "implemented": [],
+  "prefix": "RAUMTHERMOSTAT"
+}
