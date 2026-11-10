@@ -290,7 +290,8 @@ class Raumthermostat extends IPSModule
 
     /**
      * Legt den Wochenplan "Zeitplan" unter der Instanz an, mit den Aktionen Nacht und Tag.
-     * Vorgabe: rund um die Uhr Tag. Jeder Schaltpunkt ruft RequestAction('Zeitplan') auf.
+     * Vorgabe: rund um die Uhr Tag. Jeder Wochentag hat eine eigene Gruppe, damit er sich in
+     * App und WebFront einzeln ändern lässt. Jeder Schaltpunkt ruft RequestAction('Zeitplan') auf.
      */
     private function ZeitplanAnlegen(): void
     {
@@ -305,8 +306,10 @@ class Raumthermostat extends IPSModule
         IPS_SetPosition($id, 9);
         IPS_SetEventScheduleAction($id, self::AKTION_NACHT, 'Nacht', 0x3F51B5, $skript);
         IPS_SetEventScheduleAction($id, self::AKTION_TAG, 'Tag', 0xFF9800, $skript);
-        IPS_SetEventScheduleGroup($id, 0, 127); // Montag bis Sonntag
-        IPS_SetEventScheduleGroupPoint($id, 0, 0, 0, 0, 0, self::AKTION_TAG); // 00:00 Tag, also rund um die Uhr
+        for ($tag = 0; $tag < 7; $tag++) { // Gruppe 0 = Montag (Bit 1) bis 6 = Sonntag (Bit 64)
+            IPS_SetEventScheduleGroup($id, $tag, 1 << $tag);
+            IPS_SetEventScheduleGroupPoint($id, $tag, 0, 0, 0, 0, self::AKTION_TAG); // 00:00 Tag, also rund um die Uhr
+        }
         IPS_SetEventActive($id, true);
     }
 
