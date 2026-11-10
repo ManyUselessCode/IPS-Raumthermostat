@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 // Prüft den Wochenplan, den das Raumthermostat anlegt. Aufruf: php tests/test.php
-// Nachgebaut sind nur die Symcon-Funktionen, die ZeitplanAnlegen und ZeitplanAktion brauchen.
+// Nachgebaut sind nur die Symcon-Funktionen, die ZeitplanAnlegen, ZeitplanAktion und AufzeichnungEinschalten brauchen.
+// Prüft außerdem, dass Raumthermostat und Heizzentrale alle Variablen aufzeichnen.
 
 class IPSModule
 {
@@ -50,7 +51,41 @@ function IPS_GetEvent($id)
     return ['ScheduleGroups' => array_values($EREIGNIS['ScheduleGroups'])];
 }
 
+// Archiv: Instanz 1 hat die Variablen 10, 11, 12 und das Ereignis 2; 10 wird schon aufgezeichnet
+$ARCHIV = ['vorhanden' => true, 'log' => [10 => true], 'uebernommen' => 0];
+function IPS_GetInstanceListByModuleID($guid)
+{
+    global $ARCHIV;
+    return ($ARCHIV['vorhanden'] && $guid === '{43192F0B-135B-4CE7-A0A7-1475603F3060}') ? [99] : [];
+}
+function IPS_GetChildrenIDs($id)
+{
+    return [10, 11, 12, 2];
+}
+function IPS_VariableExists($id)
+{
+    return in_array($id, [10, 11, 12], true);
+}
+function AC_GetLoggingStatus($archiv, $id)
+{
+    global $ARCHIV;
+    return $ARCHIV['log'][$id] ?? false;
+}
+function AC_SetLoggingStatus($archiv, $id, $an)
+{
+    global $ARCHIV;
+    $ARCHIV['log'][$id] = $an;
+}
+function IPS_ApplyChanges($id)
+{
+    global $ARCHIV;
+    if ($id === 99) {
+        $ARCHIV['uebernommen']++;
+    }
+}
+
 require __DIR__ . '/../Raumthermostat/module.php';
+require __DIR__ . '/../Heizzentrale/module.php';
 
 $fehler = 0;
 $pruefungen = 0;
@@ -98,6 +133,22 @@ pruefe($aktion->invoke($modul, mktime(1, 0, 0, 11, 11, 2026)) === 2, 'Mittwoch 0
 $vorher = $EREIGNIS;
 $anlegen->invoke($modul);
 pruefe($EREIGNIS === $vorher, 'bestehender Zeitplan bleibt');
+
+// Aufzeichnung: alle Variablen an, keine Ereignisse, Archiv nur bei Änderung übernehmen
+foreach ([new Raumthermostat(), new Heizzentrale()] as $instanz) {
+    $name = get_class($instanz);
+    $ARCHIV = ['vorhanden' => true, 'log' => [10 => true], 'uebernommen' => 0];
+    $aufzeichnen = new ReflectionMethod($instanz, 'AufzeichnungEinschalten');
+    $aufzeichnen->invoke($instanz);
+    pruefe($ARCHIV['log'] === [10 => true, 11 => true, 12 => true], "$name: alle Variablen aufgezeichnet");
+    pruefe(!isset($ARCHIV['log'][2]), "$name: Ereignis nicht aufgezeichnet");
+    pruefe($ARCHIV['uebernommen'] === 1, "$name: Archiv einmal übernommen");
+    $aufzeichnen->invoke($instanz);
+    pruefe($ARCHIV['uebernommen'] === 1, "$name: ohne Änderung kein zweites Übernehmen");
+    $ARCHIV = ['vorhanden' => false, 'log' => [], 'uebernommen' => 0];
+    $aufzeichnen->invoke($instanz);
+    pruefe($ARCHIV['log'] === [], "$name: ohne Archiv passiert nichts");
+}
 
 echo "$pruefungen Prüfungen, $fehler Fehler\n";
 exit($fehler ? 1 : 0);

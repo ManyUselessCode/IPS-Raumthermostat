@@ -11,6 +11,7 @@ declare(strict_types=1);
  */
 class Raumthermostat extends IPSModule
 {
+    private const ARCHIV_MODUL = '{43192F0B-135B-4CE7-A0A7-1475603F3060}';
     private const ZENTRALE_MODUL = '{3581511F-55BB-4D47-A922-CEA2D4118A59}';
 
     // Darstellungen, GUIDs aus IPS_GetPresentations (Symcon 9.0)
@@ -211,6 +212,7 @@ class Raumthermostat extends IPSModule
     private function Einrichten(bool $start = false): void
     {
         $this->ZeitplanAnlegen();
+        $this->AufzeichnungEinschalten();
 
         $ist = $this->ReadPropertyInteger('IstID');
         $schalten = $this->ReadPropertyInteger('VentilSchaltenID');
@@ -260,6 +262,30 @@ class Raumthermostat extends IPSModule
             $this->ZustandZeigen();
             $this->FuehlerTimerStarten();
             $this->SollBerechnen('Einstellungen übernommen');
+        }
+    }
+
+    /**
+     * Schaltet die Aufzeichnung im Archiv für alle Variablen der Instanz ein.
+     * Was schon aufgezeichnet wird, bleibt unverändert. Ausgeschaltet wird nie.
+     */
+    private function AufzeichnungEinschalten(): void
+    {
+        $archive = IPS_GetInstanceListByModuleID(self::ARCHIV_MODUL);
+        if (count($archive) == 0) {
+            return;
+        }
+        $archiv = $archive[0];
+        $geaendert = false;
+        foreach (IPS_GetChildrenIDs($this->InstanceID) as $kind) {
+            if (!IPS_VariableExists($kind) || AC_GetLoggingStatus($archiv, $kind)) {
+                continue;
+            }
+            AC_SetLoggingStatus($archiv, $kind, true);
+            $geaendert = true;
+        }
+        if ($geaendert) {
+            IPS_ApplyChanges($archiv);
         }
     }
 

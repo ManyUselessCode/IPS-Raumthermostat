@@ -16,6 +16,8 @@ class Heizzentrale extends IPSModule
     private const DARSTELLUNG_REGLER = '{6B9CAEEC-5958-C223-30F7-BD36569FC57A}';
 
     private const STATUS_FEHLER = 201;
+    private const ARCHIV_MODUL = '{43192F0B-135B-4CE7-A0A7-1475603F3060}';
+
 
     public function Create()
     {
@@ -72,6 +74,9 @@ class Heizzentrale extends IPSModule
         $this->Vorgabe('Heizphase', true);
         $this->Vorgabe('Frostschutz', 7.0);
         $this->Vorgabe('UrlaubSoll', 16.0);
+        if (IPS_GetKernelRunlevel() == KR_READY) {
+            $this->AufzeichnungEinschalten();
+        }
 
         $visu = $this->ReadPropertyInteger('VisualisierungID');
         if ($visu > 0) {
@@ -83,6 +88,30 @@ class Heizzentrale extends IPSModule
             $this->RegisterReference($visu);
         }
         $this->SetStatus(IS_ACTIVE);
+    }
+
+    /**
+     * Schaltet die Aufzeichnung im Archiv für alle Variablen der Instanz ein.
+     * Was schon aufgezeichnet wird, bleibt unverändert. Ausgeschaltet wird nie.
+     */
+    private function AufzeichnungEinschalten(): void
+    {
+        $archive = IPS_GetInstanceListByModuleID(self::ARCHIV_MODUL);
+        if (count($archive) == 0) {
+            return;
+        }
+        $archiv = $archive[0];
+        $geaendert = false;
+        foreach (IPS_GetChildrenIDs($this->InstanceID) as $kind) {
+            if (!IPS_VariableExists($kind) || AC_GetLoggingStatus($archiv, $kind)) {
+                continue;
+            }
+            AC_SetLoggingStatus($archiv, $kind, true);
+            $geaendert = true;
+        }
+        if ($geaendert) {
+            IPS_ApplyChanges($archiv);
+        }
     }
 
     public function RequestAction($Ident, $Value)
