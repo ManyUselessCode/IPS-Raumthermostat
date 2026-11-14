@@ -93,6 +93,11 @@ class Raumthermostat extends IPSModule
         $this->RegisterVariableFloat('SollNacht', 'Soll Nacht', $regler + ['ICON' => 'moon'], 6);
         $this->RegisterVariableString('Grund', 'Grund', '', 7);
         $this->RegisterVariableInteger('Fuehlerausfall', 'Fühlerausfall', '', 8);
+        $this->RegisterVariableFloat('Sollabweichung', 'Sollabweichung', [
+            'PRESENTATION' => self::DARSTELLUNG_WERT,
+            'DIGITS'       => 1,
+            'SUFFIX'       => ' K'
+        ], 10);
         foreach (['Soll', 'Heizen', 'SollTag', 'SollNacht'] as $ident) {
             $this->EnableAction($ident);
         }
@@ -220,12 +225,14 @@ class Raumthermostat extends IPSModule
         if ($ist == 0 || $schalten == 0 || $status == 0) {
             $this->TimerStoppen();
             $this->SetStatus(IS_INACTIVE);
+            $this->SollabweichungSetzen();
             return;
         }
         $zentrale = $this->ReadPropertyInteger('ZentraleID');
         if (!$this->IstZentrale($zentrale)) {
             $this->TimerStoppen();
             $this->SetStatus(self::STATUS_KEINE_ZENTRALE);
+            $this->SollabweichungSetzen();
             return;
         }
         $fehler = $this->Pruefen();
@@ -233,6 +240,7 @@ class Raumthermostat extends IPSModule
             $this->LogMessage($fehler, KL_ERROR);
             $this->TimerStoppen();
             $this->SetStatus(self::STATUS_FEHLER);
+            $this->SollabweichungSetzen();
             return;
         }
 
@@ -256,6 +264,7 @@ class Raumthermostat extends IPSModule
         $this->Vorgabe('Heizen', true);
         IPS_SetHidden($this->GetIDForIdent('Grund'), true);
         IPS_SetHidden($this->GetIDForIdent('Fuehlerausfall'), true);
+        IPS_SetHidden($this->GetIDForIdent('Sollabweichung'), true);
 
         $this->SetStatus(IS_ACTIVE);
         if (!$start) {
@@ -411,11 +420,17 @@ class Raumthermostat extends IPSModule
         $this->Regeln();
     }
 
+    private function Regeln(): void
+    {
+        $this->VentilRegeln();
+        $this->SollabweichungSetzen();
+    }
+
     /**
      * Zweipunktregler: Ventil auf, wenn Ist unter Soll minus Toleranz fällt, zu, wenn Ist
      * über Soll plus Toleranz steigt. Ein Befehl geht nur, wenn der Status abweicht.
      */
-    private function Regeln(): void
+    private function VentilRegeln(): void
     {
         if ($this->GetStatus() != IS_ACTIVE) {
             return;
@@ -441,6 +456,44 @@ class Raumthermostat extends IPSModule
         } elseif ($ist > $soll + $toleranz && $offen) {
             $this->VentilSchalten(false, 'Ventil zu: ' . $this->Temperatur($ist) . ' > ' . $this->Temperatur($soll + $toleranz));
         }
+    }
+
+    /**
+     * Schreibt die Sollabweichung, die die Heizung über die Melde-Skripte bekommt
+     * (Ist minus Soll, negativ = Bedarf). Ohne Heizen, bei Fühlerausfall oder
+     * inaktiver Instanz fordert der Raum nichts an (0).
+     */
+    private function SollabweichungSetzen(): void
+    {
+        $wert = 0.0;
+        if ($this->GetStatus() == IS_ACTIVE && $this->GetValue('Heizen')
+            && $this->GetValue('Fuehlerausfall') == self::AUSFALL_NEIN) {
+            $wert = $this->Sollabweichung(
+                (float) GetValue($this->ReadPropertyInteger('IstID')),
+                (float) $this->GetValue('Soll'),
+                $this->ReadPropertyFloat('Toleranz'),
+                $this->VentilOffen()
+            );
+        }
+        $this->SetValue('Sollabweichung', $wert);
+    }
+
+    /**
+     * Sollbereich wie beim Zweipunktregler: Soll minus Toleranz bis Soll plus Toleranz.
+     * Außerhalb Ist minus Soll. Im Sollbereich mit offenem Ventil Ist minus obere Grenze
+     * (negativ, die Pumpe läuft, bis das Ventil schließt), mit geschlossenem Ventil 0.
+     */
+    private function Sollabweichung(float $ist, float $soll, float $toleranz, bool $offen): float
+    {
+        if ($ist < $soll - $toleranz || $ist > $soll + $toleranz) {
+            $wert = $ist - $soll;
+        } elseif ($offen) {
+            $wert = $ist - ($soll + $toleranz);
+        } else {
+            $wert = 0.0;
+        }
+        $wert = round($wert, 2);
+        return $wert == 0 ? 0.0 : $wert; // keine -0
     }
 
     private function SollSetzen(float $soll, string $ausloeser): void
@@ -478,6 +531,7 @@ class Raumthermostat extends IPSModule
         if (time() - (int) $this->GetBuffer('Befehl') > self::BEFEHL_SPERRE_S) {
             $this->Grund('Ventil ' . ($offen ? 'offen' : 'zu') . ': von Extern');
         }
+        $this->SollabweichungSetzen();
     }
 
     private function FensterGeaendert(bool $offen): void
@@ -539,6 +593,7 @@ class Raumthermostat extends IPSModule
         if ($this->VentilOffen()) {
             $this->VentilSchalten(false, 'Ventil zu: Fühler ausgefallen');
         }
+        $this->SollabweichungSetzen();
     }
 
     private function FuehlerErholt(): void

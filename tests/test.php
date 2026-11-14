@@ -150,5 +150,31 @@ foreach ([new Raumthermostat(), new Heizzentrale()] as $instanz) {
     pruefe($ARCHIV['log'] === [], "$name: ohne Archiv passiert nichts");
 }
 
+// Sollabweichung: Sollbereich 20,7 bis 21,3 (Soll 21, Toleranz 0,3)
+$abweichung = new ReflectionMethod($modul, 'Sollabweichung');
+$faelle = [
+    // Ist, Ventil offen, erwartet
+    [20.4, false, -0.6], // unter dem Sollbereich, Ventil öffnet gleich
+    [20.6, true, -0.4],  // unter dem Sollbereich
+    [20.7, false, 0.0],  // untere Grenze, Ventil zu: kein Bedarf
+    [20.7, true, -0.6],  // untere Grenze, Ventil offen
+    [20.9, false, 0.0],  // im Sollbereich, Ventil zu
+    [20.9, true, -0.4],  // im Sollbereich, Ventil offen: Pumpe läuft weiter
+    [21.2, true, -0.1],
+    [21.3, true, 0.0],   // obere Grenze
+    [21.3, false, 0.0],
+    [21.4, true, 0.4],   // über dem Sollbereich, Ventil schließt gleich
+    [21.4, false, 0.4],
+    [22.0, false, 1.0],
+];
+foreach ($faelle as [$ist, $offen, $erwartet]) {
+    $wert = $abweichung->invoke($modul, $ist, 21.0, 0.3, $offen);
+    pruefe($wert === $erwartet, "Sollabweichung Ist $ist, Ventil " . ($offen ? 'offen' : 'zu') . ": $wert statt $erwartet");
+    pruefe((string) $wert !== "-0" && is_float($wert), "Sollabweichung Ist $ist ohne -0");
+}
+// Toleranz mit Rundungsfehler wie in der Anlage (0,30000000000000004)
+pruefe($abweichung->invoke($modul, 20.7, 21.0, 0.30000000000000004, false) === 0.0, 'Grenze bei krummer Toleranz');
+pruefe($abweichung->invoke($modul, 15.41, 14.0, 0.3, false) === 1.41, 'zwei Nachkommastellen');
+
 echo "$pruefungen Prüfungen, $fehler Fehler\n";
 exit($fehler ? 1 : 0);

@@ -32,6 +32,7 @@ Einstellung: die Kachel-Visualisierung, über die Push-Nachrichten gehen (option
 - **Ventil:** offen oder zu, aus der Status-Variable.
 - **Soll Tag, Soll Nacht:** Temperaturen für die beiden Stufen des Zeitplans (Vorgabe 21 °C und 18 °C).
 - **Grund:** Text zur letzten Entscheidung, zum Beispiel „Soll 21,0: Zeitplan Tag“ oder „Ventil auf: 20,4 < 20,7“. Versteckt, zum Auswerten im Archiv.
+- **Sollabweichung:** Heizbedarf des Raums für die Heizung, Ist minus Soll in K (negativ = Bedarf). Sollbereich ist Soll ± Toleranz. Außerhalb gilt Ist minus Soll, im Sollbereich mit offenem Ventil Ist minus (Soll + Toleranz), mit geschlossenem Ventil 0. So bleibt der Wert negativ, solange das Ventil offen ist. Ohne Heizen, bei Fühlerausfall oder inaktiver Instanz 0. Versteckt.
 - **Zeitplan:** Wochenplan mit den Aktionen Tag und Nacht, den die Instanz selbst anlegt. Vorgabe: rund um die Uhr Tag.
 
 ### Sollwert
