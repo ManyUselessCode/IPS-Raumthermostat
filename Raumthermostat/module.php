@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Ein Raumthermostat je Raum, nach dem Home-Assistant-Blueprint "Heizung | Raumcontroller".
+ * Ein Raumthermostat je Raum.
  * Rechnet den Sollwert aus Zeitplan (Tag/Nacht), Heizphase, Urlaub und Fenstern,
  * regelt das Ventil als Zweipunktregler und überwacht den Temperaturfühler.
  * Heizphase, Frostschutz, Urlaub und Urlaubs-Soll kommen aus der Heizzentrale.
@@ -387,7 +387,7 @@ class Raumthermostat extends IPSModule
     }
 
     /**
-     * Rechnet den Sollwert in der Reihenfolge des Blueprints: Fenster offen, Heizphase aus,
+     * Rechnet den Sollwert in dieser Reihenfolge: Fenster offen, Heizphase aus,
      * Urlaub, sonst Zeitplan. Nie unter Frostschutz. Danach wird geregelt.
      */
     private function SollBerechnen(string $ausloeser): void

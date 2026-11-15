@@ -1,6 +1,6 @@
 # IPS-Raumthermostat
 
-Symcon-Modul für die Heizung mit KNX-Schaltventilen. Vorbild ist der Home-Assistant-Blueprint „Heizung | Raumcontroller“. Die Bibliothek enthält zwei Module:
+Symcon-Modul für die Heizung mit KNX-Schaltventilen. Die Bibliothek enthält zwei Module:
 
 - **Raumthermostat:** eine Instanz je Raum. Rechnet den Sollwert, regelt das Ventil und überwacht den Temperaturfühler.
 - **Heizzentrale:** eine Instanz je Wohnung. Hält die Werte, die für alle Räume gelten, und schickt Push-Nachrichten.
