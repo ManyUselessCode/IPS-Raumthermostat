@@ -26,14 +26,19 @@ Einstellung: die Kachel-Visualisierung, über die Push-Nachrichten gehen (option
 
 ### Variablen
 
-- **Soll:** Sollwert, 5–30 °C in 0,1-K-Schritten. Ein von Hand gesetzter Wert gilt bis zum nächsten Schaltpunkt oder Zustandswechsel. Aus Skripten: `RAUMTHERMOSTAT_SetzeSoll(ID, Soll, Grund)`.
+Sichtbar in dieser Reihenfolge (das Modul setzt sie bei jedem Übernehmen):
+
 - **Ist:** aktuelle Temperatur.
+- **Soll:** Sollwert, 5–30 °C in 0,1-K-Schritten. Ein von Hand gesetzter Wert gilt bis zum nächsten Schaltpunkt oder Zustandswechsel. Aus Skripten: `RAUMTHERMOSTAT_SetzeSoll(ID, Soll, Grund)`.
+- **Ventil Status:** offen oder zu, aus der Status-Variable (Ident `Ventil`).
 - **Heizen:** aus = Ventil zu, egal was der Sollwert sagt.
-- **Ventil:** offen oder zu, aus der Status-Variable.
+
+Versteckt:
+
 - **Soll Tag, Soll Nacht:** Temperaturen für die beiden Stufen des Zeitplans (Vorgabe 21 °C und 18 °C).
 - **Grund:** Text zur letzten Entscheidung, zum Beispiel „Soll 21,0: Zeitplan Tag“ oder „Ventil auf: 20,4 < 20,7“. Versteckt, zum Auswerten im Archiv.
 - **Sollabweichung:** Heizbedarf des Raums für die Heizung, Ist minus Soll in K (negativ = Bedarf). Sollbereich ist Soll ± Toleranz. Außerhalb gilt Ist minus Soll, im Sollbereich mit offenem Ventil Ist minus (Soll + Toleranz), mit geschlossenem Ventil 0. So bleibt der Wert negativ, solange das Ventil offen ist. Ohne Heizen, bei Fühlerausfall oder inaktiver Instanz 0. Versteckt.
-- **Zeitplan:** Wochenplan mit den Aktionen Tag und Nacht, den die Instanz selbst anlegt. Vorgabe: rund um die Uhr Tag.
+- **Zeitplan:** Wochenplan mit den Aktionen Tag und Nacht, den die Instanz selbst anlegt. Vorgabe: rund um die Uhr Tag. Versteckt.
 
 ### Sollwert
 

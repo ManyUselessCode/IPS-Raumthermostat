@@ -68,27 +68,28 @@ class Raumthermostat extends IPSModule
             'DIGITS'       => 1,
             'SUFFIX'       => ' °C'
         ];
-        $this->RegisterVariableFloat('Soll', 'Soll', $regler + ['ICON' => 'temperature-half'], 1);
+        $this->RegisterVariableFloat('Soll', 'Soll', $regler + ['ICON' => 'temperature-half'], 2);
         $this->RegisterVariableFloat('Ist', 'Ist', [
             'PRESENTATION' => self::DARSTELLUNG_WERT,
             'DIGITS'       => 1,
             'SUFFIX'       => ' °C',
             'ICON'         => 'thermometer'
-        ], 2);
+        ], 1);
         $this->RegisterVariableBoolean('Heizen', 'Heizen', [
             'PRESENTATION'   => self::DARSTELLUNG_SCHALTER,
             'ICON_TRUE'      => 'fire',
             'ICON_FALSE'     => 'fire',
             'USE_ICON_FALSE' => false,
             'USAGE_TYPE'     => 0
-        ], 3);
-        $this->RegisterVariableBoolean('Ventil', 'Ventil', [
-            'PRESENTATION' => self::DARSTELLUNG_AUFZAEHLUNG,
-            'OPTIONS'      => json_encode([
-                ['Value' => false, 'Caption' => 'zu', 'IconActive' => true, 'IconValue' => 'minus'],
-                ['Value' => true, 'Caption' => 'offen', 'IconActive' => true, 'IconValue' => 'fire']
-            ])
         ], 4);
+        $this->RegisterVariableBoolean('Ventil', 'Ventil Status', [
+            'PRESENTATION' => self::DARSTELLUNG_AUFZAEHLUNG,
+            'ICON'         => 'faucet',
+            'OPTIONS'      => json_encode([
+                ['Value' => false, 'Caption' => 'zu', 'IconActive' => false, 'IconValue' => ''],
+                ['Value' => true, 'Caption' => 'offen', 'IconActive' => false, 'IconValue' => '']
+            ])
+        ], 3);
         $this->RegisterVariableFloat('SollTag', 'Soll Tag', $regler + ['ICON' => 'sun'], 5);
         $this->RegisterVariableFloat('SollNacht', 'Soll Nacht', $regler + ['ICON' => 'moon'], 6);
         $this->RegisterVariableString('Grund', 'Grund', '', 7);
@@ -262,9 +263,7 @@ class Raumthermostat extends IPSModule
         $this->Vorgabe('SollTag', 21.0);
         $this->Vorgabe('SollNacht', 18.0);
         $this->Vorgabe('Heizen', true);
-        IPS_SetHidden($this->GetIDForIdent('Grund'), true);
-        IPS_SetHidden($this->GetIDForIdent('Fuehlerausfall'), true);
-        IPS_SetHidden($this->GetIDForIdent('Sollabweichung'), true);
+        $this->KachelOrdnen();
 
         $this->SetStatus(IS_ACTIVE);
         if (!$start) {
@@ -321,6 +320,28 @@ class Raumthermostat extends IPSModule
             }
         }
         return count($falsch) ? 'Ungültige IDs: ' . implode(', ', $falsch) : '';
+    }
+
+    /**
+     * Ordnet die Variablen für die Kachel-Visualisierung, gleich in jedem Raum:
+     * Ist, Soll, Ventil Status, Heizen; alles andere ist versteckt.
+     * RegisterVariable ändert Name und Position bestehender Variablen nicht, deshalb hier.
+     */
+    private function KachelOrdnen(): void
+    {
+        $sichtbar = ['Ist' => 1, 'Soll' => 2, 'Ventil' => 3, 'Heizen' => 4];
+        foreach ($sichtbar as $ident => $position) {
+            $id = $this->GetIDForIdent($ident);
+            IPS_SetPosition($id, $position);
+            IPS_SetHidden($id, false);
+        }
+        IPS_SetName($this->GetIDForIdent('Ventil'), 'Ventil Status');
+        foreach (['SollTag', 'SollNacht', 'Grund', 'Fuehlerausfall', 'Sollabweichung', 'Zeitplan'] as $ident) {
+            $id = @IPS_GetObjectIDByIdent($ident, $this->InstanceID);
+            if ($id !== false) {
+                IPS_SetHidden($id, true);
+            }
+        }
     }
 
     /**
