@@ -9,7 +9,7 @@ Symcon-Modul für die Heizung mit KNX-Schaltventilen. Die Bibliothek enthält zw
 
 Variablen, in WebFront und App bedienbar:
 
-- **Heizphase:** an = die Räume heizen nach Zeitplan, aus = alle Räume auf Frostschutz.
+- **Heizphase:** an = die Räume heizen auf ihren Raumwert, aus = alle Räume auf Frostschutz.
 - **Frostschutz:** Untergrenze für alle Räume (5–15 °C, Vorgabe 7 °C).
 - **Urlaub:** an = alle Räume auf den Urlaubs-Soll.
 - **Urlaubs-Soll:** Temperatur im Urlaub (10–22 °C, Vorgabe 16 °C).
@@ -29,20 +29,35 @@ Einstellung: die Kachel-Visualisierung, über die Push-Nachrichten gehen (option
 Sichtbar in dieser Reihenfolge (das Modul setzt sie bei jedem Übernehmen):
 
 - **Ist:** aktuelle Temperatur.
-- **Soll:** Sollwert, 5–30 °C in 0,1-K-Schritten. Ein von Hand gesetzter Wert gilt bis zum nächsten Schaltpunkt oder Zustandswechsel. Aus Skripten: `RAUMTHERMOSTAT_SetzeSoll(ID, Soll, Grund)`.
+- **Soll:** Sollwert, 5–30 °C in 0,1-K-Schritten. Zeigt den Wert, auf den geregelt wird (siehe Sollwert). Aus Skripten: `RAUMTHERMOSTAT_SetzeSoll(ID, Soll, Grund)`.
 - **Ventil Status:** offen oder zu, aus der Status-Variable (Ident `Ventil`).
-- **Heizen:** aus = Ventil zu, egal was der Sollwert sagt.
+- **Heizen:** aus = Frostschutz.
+- **Automatik:** an = der Zeitplan gibt den Raumwert vor, aus = nur von Hand.
+- **Soll Tag, Soll Nacht:** Temperaturen für die beiden Stufen des Zeitplans (Vorgabe 21 °C und 18 °C). Nur mit Automatik sichtbar.
+- **Zeitplan:** Wochenplan mit den Aktionen Tag und Nacht, den die Instanz selbst anlegt. Vorgabe: rund um die Uhr Tag. Nur mit Automatik sichtbar und aktiv.
 
 Versteckt:
 
-- **Soll Tag, Soll Nacht:** Temperaturen für die beiden Stufen des Zeitplans (Vorgabe 21 °C und 18 °C).
+- **Soll gemerkt:** der Raumwert, auf den „Soll“ nach einem Vorrang zurückkehrt.
 - **Grund:** Text zur letzten Entscheidung, zum Beispiel „Soll 21,0: Zeitplan Tag“ oder „Ventil auf: 20,4 < 20,7“. Versteckt, zum Auswerten im Archiv.
-- **Sollabweichung:** Heizbedarf des Raums für die Heizung, Ist minus Soll in K (negativ = Bedarf). Sollbereich ist Soll ± Toleranz. Außerhalb gilt Ist minus Soll, im Sollbereich mit offenem Ventil Ist minus (Soll + Toleranz), mit geschlossenem Ventil 0. So bleibt der Wert negativ, solange das Ventil offen ist. Ohne Heizen, bei Fühlerausfall oder inaktiver Instanz 0. Versteckt.
-- **Zeitplan:** Wochenplan mit den Aktionen Tag und Nacht, den die Instanz selbst anlegt. Vorgabe: rund um die Uhr Tag. Versteckt.
+- **Sollabweichung:** Heizbedarf des Raums für die Heizung, Ist minus Soll in K (negativ = Bedarf). Sollbereich ist Soll ± Toleranz. Außerhalb gilt Ist minus Soll, im Sollbereich mit offenem Ventil Ist minus (Soll + Toleranz), mit geschlossenem Ventil 0. So bleibt der Wert negativ, solange das Ventil offen ist. Bei Fühlerausfall oder inaktiver Instanz 0. Versteckt.
 
 ### Sollwert
 
-In dieser Reihenfolge: Fenster länger offen → Frostschutz. Heizphase aus → Frostschutz. Urlaub → Urlaubs-Soll. Sonst Zeitplan (Tag oder Nacht). Nie unter Frostschutz.
+In dieser Reihenfolge: Fenster länger offen → Frostschutz. Heizen aus → Frostschutz. Heizphase aus → Frostschutz. Urlaub → Urlaubs-Soll. Sonst der Raumwert. Nie unter Frostschutz.
+
+Der Raumwert („Soll gemerkt“):
+
+| Ereignis | Automatik an | Automatik aus |
+|---|---|---|
+| Soll von Hand oder per Skript | gilt bis zum nächsten Schaltpunkt | gilt dauerhaft |
+| Schaltpunkt | Zeitplanwert | keine Wirkung |
+| Soll Tag/Nacht geändert | gilt sofort, außer ein Handwert gilt | keine Wirkung |
+| Neustart, Übernehmen, `RAUMTHERMOSTAT_Aktualisieren(ID)` | Zeitplanwert | bleibt |
+| Automatik einschalten | Zeitplanwert | – |
+| Automatik ausschalten | – | bleibt |
+
+Wird Soll während eines Vorrangs von Hand gesetzt, merkt sich das Modul den Wert und wendet ihn danach an. Ein geänderter Zeitplan wirkt ab dem nächsten Schaltpunkt. Neue Instanzen starten mit Automatik aus und Soll Tag; beim Update von 1.2 folgt die Automatik dem Zustand des Zeitplans.
 
 ### Regelung
 
@@ -54,7 +69,7 @@ Kommt länger als die Zeitgrenze kein Messwert, gilt der Fühler als ausgefallen
 
 ### Start
 
-Nach dem Start wartet das Modul eine Minute, liest Ventil Status und Temperatur vom Bus und rechnet dann.
+Nach dem Start wartet das Modul eine Minute, liest Ventil Status und Temperatur vom Bus und rechnet dann. Eine noch laufende Fensterverzögerung setzt es fort. Fensterkontakte liest es nicht ein.
 
 ## Aufzeichnung
 

@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 /**
  * Ein Raumthermostat je Raum.
- * Rechnet den Sollwert aus Zeitplan (Tag/Nacht), Heizphase, Urlaub und Fenstern,
- * regelt das Ventil als Zweipunktregler und überwacht den Temperaturfühler.
+ * Der Raumwert (Variable "Soll gemerkt") kommt mit Automatik aus dem Zeitplan (Tag/Nacht)
+ * oder von Hand, ohne Automatik nur von Hand. Fenster, Heizen aus, Heizphase aus und
+ * Urlaub haben Vorrang, "Soll" ist das Ergebnis. Regelt das Ventil als Zweipunktregler und überwacht den Temperaturfühler.
  * Heizphase, Frostschutz, Urlaub und Urlaubs-Soll kommen aus der Heizzentrale.
  * Der Zustand des Ventils kommt immer aus der Status-Variable, nie aus der Befehlsinstanz.
  */
@@ -82,6 +83,13 @@ class Raumthermostat extends IPSModule
             'USE_ICON_FALSE' => false,
             'USAGE_TYPE'     => 0
         ], 4);
+        $this->RegisterVariableBoolean('Automatik', 'Automatik', [
+            'PRESENTATION'   => self::DARSTELLUNG_SCHALTER,
+            'ICON_TRUE'      => 'calendar-clock',
+            'ICON_FALSE'     => 'calendar-clock',
+            'USE_ICON_FALSE' => false,
+            'USAGE_TYPE'     => 0
+        ], 5);
         $this->RegisterVariableBoolean('Ventil', 'Ventil Status', [
             'PRESENTATION' => self::DARSTELLUNG_AUFZAEHLUNG,
             'ICON'         => 'faucet',
@@ -90,16 +98,21 @@ class Raumthermostat extends IPSModule
                 ['Value' => true, 'Caption' => 'offen', 'IconActive' => false, 'IconValue' => '']
             ])
         ], 3);
-        $this->RegisterVariableFloat('SollTag', 'Soll Tag', $regler + ['ICON' => 'sun'], 5);
-        $this->RegisterVariableFloat('SollNacht', 'Soll Nacht', $regler + ['ICON' => 'moon'], 6);
-        $this->RegisterVariableString('Grund', 'Grund', '', 7);
-        $this->RegisterVariableInteger('Fuehlerausfall', 'Fühlerausfall', '', 8);
+        $this->RegisterVariableFloat('SollTag', 'Soll Tag', $regler + ['ICON' => 'sun'], 6);
+        $this->RegisterVariableFloat('SollNacht', 'Soll Nacht', $regler + ['ICON' => 'moon'], 7);
+        $this->RegisterVariableString('Grund', 'Grund', '', 9);
+        $this->RegisterVariableInteger('Fuehlerausfall', 'Fühlerausfall', '', 10);
         $this->RegisterVariableFloat('Sollabweichung', 'Sollabweichung', [
             'PRESENTATION' => self::DARSTELLUNG_WERT,
             'DIGITS'       => 1,
             'SUFFIX'       => ' K'
-        ], 10);
-        foreach (['Soll', 'Heizen', 'SollTag', 'SollNacht'] as $ident) {
+        ], 11);
+        $this->RegisterVariableFloat('SollGemerkt', 'Soll gemerkt', [
+            'PRESENTATION' => self::DARSTELLUNG_WERT,
+            'DIGITS'       => 1,
+            'SUFFIX'       => ' °C'
+        ], 12);
+        foreach (['Soll', 'Heizen', 'Automatik', 'SollTag', 'SollNacht'] as $ident) {
             $this->EnableAction($ident);
         }
     }
@@ -170,13 +183,23 @@ class Raumthermostat extends IPSModule
             case 'Heizen':
                 $this->HeizenSetzen((bool) $Value, 'App');
                 break;
+            case 'Automatik':
+                $this->AutomatikSetzen((bool) $Value, 'App');
+                break;
             case 'SollTag':
             case 'SollNacht':
                 $this->SetValue($Ident, $this->Begrenzen((float) $Value));
+                if ($this->GetBuffer('Handwert') == '') { // ein Handwert gilt bis zum nächsten Schaltpunkt
+                    $this->RaumwertAusZeitplan();
+                }
                 $this->SollBerechnen($Ident . ' geändert');
                 break;
             case 'Zeitplan':
+                if (!$this->GetValue('Automatik')) {
+                    break;
+                }
                 $aktion = (int) $Value;
+                $this->RaumwertAusZeitplan();
                 $this->SollBerechnen('Zeitplan ' . (self::AKTION_NAME[$aktion] ?? (string) $aktion));
                 break;
             case 'StartSchritt':
@@ -195,8 +218,8 @@ class Raumthermostat extends IPSModule
     }
 
     /**
-     * Setzt den Sollwert aus einem Skript. Er gilt wie ein Soll aus der App bis zum
-     * nächsten Schaltpunkt oder Zustandswechsel.
+     * Setzt den Sollwert aus einem Skript. Er gilt wie ein Soll aus der App mit Automatik
+     * bis zum nächsten Schaltpunkt oder Neustart, ohne Automatik dauerhaft.
      */
     public function SetzeSoll(float $Soll, string $Grund): void
     {
@@ -205,9 +228,11 @@ class Raumthermostat extends IPSModule
 
     /**
      * Rechnet Soll und Ventil neu, zum Beispiel nach Änderungen am Zeitplan.
+     * Mit Automatik gilt danach der Zeitplan, ein Handwert endet.
      */
     public function Aktualisieren(): void
     {
+        $this->RaumwertAusZeitplan();
         $this->SollBerechnen('Aktualisieren');
     }
 
@@ -263,12 +288,18 @@ class Raumthermostat extends IPSModule
         $this->Vorgabe('SollTag', 21.0);
         $this->Vorgabe('SollNacht', 18.0);
         $this->Vorgabe('Heizen', true);
+        $this->Vorgabe('Automatik', $this->ZeitplanAktiv());
+        $soll = (float) $this->GetValue('Soll');
+        $this->Vorgabe('SollGemerkt', $soll >= self::SOLL_MIN ? $soll : (float) $this->GetValue('SollTag'));
         $this->KachelOrdnen();
+        $this->AutomatikAnwenden();
 
         $this->SetStatus(IS_ACTIVE);
         if (!$start) {
             $this->ZustandZeigen();
             $this->FuehlerTimerStarten();
+            $this->FensterTimerFortsetzen();
+            $this->RaumwertAusZeitplan();
             $this->SollBerechnen('Einstellungen übernommen');
         }
     }
@@ -324,30 +355,60 @@ class Raumthermostat extends IPSModule
 
     /**
      * Ordnet die Variablen für die Kachel-Visualisierung, gleich in jedem Raum:
-     * Ist, Soll, Ventil Status, Heizen; alles andere ist versteckt.
+     * Ist, Soll, Ventil Status, Heizen, Automatik; Soll Tag, Soll Nacht und Zeitplan nur mit
+     * Automatik (siehe AutomatikAnwenden), alles andere ist versteckt.
      * RegisterVariable ändert Name und Position bestehender Variablen nicht, deshalb hier.
      */
     private function KachelOrdnen(): void
     {
-        $sichtbar = ['Ist' => 1, 'Soll' => 2, 'Ventil' => 3, 'Heizen' => 4];
+        $sichtbar = ['Ist' => 1, 'Soll' => 2, 'Ventil' => 3, 'Heizen' => 4, 'Automatik' => 5];
         foreach ($sichtbar as $ident => $position) {
             $id = $this->GetIDForIdent($ident);
             IPS_SetPosition($id, $position);
             IPS_SetHidden($id, false);
         }
         IPS_SetName($this->GetIDForIdent('Ventil'), 'Ventil Status');
-        foreach (['SollTag', 'SollNacht', 'Grund', 'Fuehlerausfall', 'Sollabweichung', 'Zeitplan'] as $ident) {
+        foreach (['SollTag' => 6, 'SollNacht' => 7, 'Zeitplan' => 8] as $ident => $position) {
             $id = @IPS_GetObjectIDByIdent($ident, $this->InstanceID);
             if ($id !== false) {
-                IPS_SetHidden($id, true);
+                IPS_SetPosition($id, $position);
             }
         }
+        foreach (['Grund', 'Fuehlerausfall', 'Sollabweichung', 'SollGemerkt'] as $ident) {
+            IPS_SetHidden($this->GetIDForIdent($ident), true);
+        }
+    }
+
+    /**
+     * Zeigt Soll Tag, Soll Nacht und Zeitplan nur mit Automatik, und nur dann ist der
+     * Zeitplan aktiv.
+     */
+    private function AutomatikAnwenden(): void
+    {
+        $an = (bool) $this->GetValue('Automatik');
+        foreach (['SollTag', 'SollNacht', 'Zeitplan'] as $ident) {
+            $id = @IPS_GetObjectIDByIdent($ident, $this->InstanceID);
+            if ($id !== false) {
+                IPS_SetHidden($id, !$an);
+            }
+        }
+        $id = @IPS_GetObjectIDByIdent('Zeitplan', $this->InstanceID);
+        if ($id !== false && $this->ZeitplanAktiv() != $an) {
+            IPS_SetEventActive($id, $an);
+        }
+    }
+
+    private function ZeitplanAktiv(): bool
+    {
+        $id = @IPS_GetObjectIDByIdent('Zeitplan', $this->InstanceID);
+        return $id !== false && IPS_GetEvent($id)['EventActive'];
     }
 
     /**
      * Legt den Wochenplan "Zeitplan" unter der Instanz an, mit den Aktionen Nacht und Tag.
      * Vorgabe: rund um die Uhr Tag. Jeder Wochentag hat eine eigene Gruppe, damit er sich in
      * App und WebFront einzeln ändern lässt. Jeder Schaltpunkt ruft RequestAction('Zeitplan') auf.
+     * Er startet inaktiv, aktiv ist er nur mit Automatik.
      */
     private function ZeitplanAnlegen(): void
     {
@@ -359,14 +420,14 @@ class Raumthermostat extends IPSModule
         IPS_SetParent($id, $this->InstanceID);
         IPS_SetIdent($id, 'Zeitplan');
         IPS_SetName($id, 'Zeitplan');
-        IPS_SetPosition($id, 9);
+        IPS_SetPosition($id, 8);
         IPS_SetEventScheduleAction($id, self::AKTION_NACHT, 'Nacht', 0x3F51B5, $skript);
         IPS_SetEventScheduleAction($id, self::AKTION_TAG, 'Tag', 0xFF9800, $skript);
         for ($tag = 0; $tag < 7; $tag++) { // Gruppe 0 = Montag (Bit 1) bis 6 = Sonntag (Bit 64)
             IPS_SetEventScheduleGroup($id, $tag, 1 << $tag);
             IPS_SetEventScheduleGroupPoint($id, $tag, 0, 0, 0, 0, self::AKTION_TAG); // 00:00 Tag, also rund um die Uhr
         }
-        IPS_SetEventActive($id, true);
+        IPS_SetEventActive($id, false);
     }
 
     /**
@@ -408,34 +469,70 @@ class Raumthermostat extends IPSModule
     }
 
     /**
-     * Rechnet den Sollwert in dieser Reihenfolge: Fenster offen, Heizphase aus,
-     * Urlaub, sonst Zeitplan. Nie unter Frostschutz. Danach wird geregelt.
+     * Mit Automatik: Der Zeitplan gibt den Raumwert vor, ein Handwert endet. Ohne Automatik
+     * bleibt der Raumwert.
      */
-    private function SollBerechnen(string $ausloeser): void
+    private function RaumwertAusZeitplan(): void
+    {
+        if ($this->GetStatus() != IS_ACTIVE || !$this->GetValue('Automatik')) {
+            return;
+        }
+        $this->SetBuffer('Handwert', '');
+        $this->SetValue('SollGemerkt', (float) $this->GetValue($this->ZeitplanAktion(time()) == self::AKTION_NACHT ? 'SollNacht' : 'SollTag'));
+    }
+
+    /**
+     * Rechnet den Sollwert. Vorrang in dieser Reihenfolge: Fenster offen, Heizen aus,
+     * Heizphase aus, Urlaub. Sonst gilt der Raumwert. Nie unter Frostschutz. Danach wird
+     * geregelt. $hand: Der Raumwert wurde gerade von dieser Quelle gesetzt (App oder Skript).
+     */
+    private function SollBerechnen(string $ausloeser, string $hand = ''): void
     {
         if ($this->GetStatus() != IS_ACTIVE) {
             return;
         }
         $frost = (float) $this->ZentraleWert('Frostschutz', self::FROST_VORGABE);
+        $vorrang = '';
         if ($this->FensterOffen()) {
             $ziel = $frost;
-            $grund = 'Fenster offen';
+            $vorrang = 'Fenster offen';
+        } elseif (!$this->GetValue('Heizen') && $this->GetValue('Fuehlerausfall') != self::AUSFALL_ABGESCHALTET) {
+            $ziel = $frost;
+            $vorrang = 'Heizen aus';
         } elseif (!$this->ZentraleWert('Heizphase', true)) {
             $ziel = $frost;
-            $grund = 'Heizphase aus';
+            $vorrang = 'Heizphase aus';
         } elseif ($this->ZentraleWert('Urlaub', false)) {
             $eigen = $this->ReadPropertyFloat('UrlaubSoll');
             $ziel = $eigen > 0 ? $eigen : (float) $this->ZentraleWert('UrlaubSoll', $frost);
-            $grund = 'Urlaub';
+            $vorrang = 'Urlaub';
         } else {
-            $aktion = $this->ZeitplanAktion(time());
-            $ziel = $this->GetValue($aktion == self::AKTION_NACHT ? 'SollNacht' : 'SollTag');
-            $grund = 'Zeitplan ' . self::AKTION_NAME[$aktion];
+            $ziel = (float) $this->GetValue('SollGemerkt');
         }
-        $ziel = $this->Begrenzen(max((float) $ziel, $frost));
+        $grund = $vorrang;
+        if ($vorrang == '') {
+            if ($hand != '') {
+                $grund = $hand;
+            } elseif ($this->GetValue('Automatik') && $this->GetBuffer('Handwert') == '') {
+                $grund = 'Zeitplan ' . self::AKTION_NAME[$this->ZeitplanAktion(time())];
+            } else {
+                $grund = 'gemerkter Wert';
+            }
+        }
+        if ($ziel < $frost) {
+            $ziel = $frost;
+            $grund .= ', angehoben auf Frostschutz';
+        }
+        $ziel = $this->Begrenzen($ziel);
         $this->SendDebug('Soll', $ausloeser . ': ' . $this->Temperatur($ziel) . ' (' . $grund . ')', 0);
-        if (abs($ziel - $this->GetValue('Soll')) >= self::SOLL_SCHRITT / 2) {
-            $this->SetValue('Soll', $ziel);
+        if ($hand != '' && $vorrang != '') {
+            $this->Grund('Soll gemerkt ' . $this->Temperatur((float) $this->GetValue('SollGemerkt')) . ': ' . $hand . ', zurzeit ' . $vorrang);
+        }
+        $geaendert = abs($ziel - $this->GetValue('Soll')) >= self::SOLL_SCHRITT / 2;
+        if ($geaendert || $hand != '') {
+            $this->SetValue('Soll', $ziel); // nach einer Bedienung immer, damit die App den geltenden Wert zeigt
+        }
+        if ($geaendert || ($hand != '' && $vorrang == '')) {
             $this->Grund('Soll ' . $this->Temperatur($ziel) . ': ' . $grund);
         }
         $this->Regeln();
@@ -457,12 +554,6 @@ class Raumthermostat extends IPSModule
             return;
         }
         $offen = $this->VentilOffen();
-        if (!$this->GetValue('Heizen')) {
-            if ($offen) {
-                $this->VentilSchalten(false, 'Ventil zu: Heizen aus');
-            }
-            return;
-        }
         if ($this->GetValue('Fuehlerausfall') != self::AUSFALL_NEIN) {
             if ($offen) {
                 $this->VentilSchalten(false, 'Ventil zu: Fühler ausgefallen');
@@ -481,14 +572,13 @@ class Raumthermostat extends IPSModule
 
     /**
      * Schreibt die Sollabweichung, die die Heizung über die Melde-Skripte bekommt
-     * (Ist minus Soll, negativ = Bedarf). Ohne Heizen, bei Fühlerausfall oder
-     * inaktiver Instanz fordert der Raum nichts an (0).
+     * (Ist minus Soll, negativ = Bedarf). Bei Fühlerausfall oder inaktiver Instanz fordert
+     * der Raum nichts an (0).
      */
     private function SollabweichungSetzen(): void
     {
         $wert = 0.0;
-        if ($this->GetStatus() == IS_ACTIVE && $this->GetValue('Heizen')
-            && $this->GetValue('Fuehlerausfall') == self::AUSFALL_NEIN) {
+        if ($this->GetStatus() == IS_ACTIVE && $this->GetValue('Fuehlerausfall') == self::AUSFALL_NEIN) {
             $wert = $this->Sollabweichung(
                 (float) GetValue($this->ReadPropertyInteger('IstID')),
                 (float) $this->GetValue('Soll'),
@@ -520,9 +610,27 @@ class Raumthermostat extends IPSModule
     private function SollSetzen(float $soll, string $ausloeser): void
     {
         $soll = $this->Begrenzen($soll);
-        $this->SetValue('Soll', $soll);
-        $this->Grund('Soll ' . $this->Temperatur($soll) . ': ' . $ausloeser);
-        $this->Regeln();
+        $this->SetValue('SollGemerkt', $soll);
+        if ($this->GetStatus() != IS_ACTIVE) {
+            $this->SetValue('Soll', $soll);
+            $this->Grund('Soll ' . $this->Temperatur($soll) . ': ' . $ausloeser);
+            return;
+        }
+        $this->SetBuffer('Handwert', $this->GetValue('Automatik') ? '1' : '');
+        $this->SollBerechnen('Soll gesetzt', $ausloeser != '' ? $ausloeser : 'Skript');
+    }
+
+    private function AutomatikSetzen(bool $an, string $ausloeser): void
+    {
+        if ($an == $this->GetValue('Automatik')) {
+            return;
+        }
+        $this->SetValue('Automatik', $an);
+        $this->SetBuffer('Handwert', '');
+        $this->Grund('Automatik ' . ($an ? 'an' : 'aus') . ': ' . $ausloeser);
+        $this->AutomatikAnwenden();
+        $this->RaumwertAusZeitplan();
+        $this->SollBerechnen('Automatik');
     }
 
     private function HeizenSetzen(bool $an, string $ausloeser): void
@@ -533,7 +641,7 @@ class Raumthermostat extends IPSModule
             $this->SetValue('Fuehlerausfall', self::AUSFALL_JA);
         }
         $this->Grund('Heizen ' . ($an ? 'an' : 'aus') . ': ' . $ausloeser);
-        $this->Regeln();
+        $this->SollBerechnen('Heizen');
     }
 
     private function IstGemeldet(float $wert): void
@@ -577,6 +685,26 @@ class Raumthermostat extends IPSModule
             }
         }
         return false;
+    }
+
+    /**
+     * Setzt eine noch laufende Verzögerung fort, sonst bliebe ein kurz vor dem Neustart
+     * geöffnetes Fenster unbemerkt.
+     */
+    private function FensterTimerFortsetzen(): void
+    {
+        $verzoegerung = $this->ReadPropertyInteger('FensterVerzoegerung') * 60;
+        $reste = [];
+        foreach ($this->Liste('Fenster') as $fenster) {
+            $id = $fenster['VariableID'];
+            if (IPS_VariableExists($id) && GetValueBoolean($id)) {
+                $rest = $verzoegerung - (time() - IPS_GetVariable($id)['VariableChanged']);
+                if ($rest > 0) {
+                    $reste[] = $rest;
+                }
+            }
+        }
+        $this->SetTimerInterval('Fenster', count($reste) ? min($reste) * 1000 + 500 : 0);
     }
 
     /**
@@ -660,6 +788,8 @@ class Raumthermostat extends IPSModule
         }
         $this->ZustandZeigen();
         $this->FuehlerTimerStarten();
+        $this->FensterTimerFortsetzen();
+        $this->RaumwertAusZeitplan();
         $this->SollBerechnen('Start');
     }
 

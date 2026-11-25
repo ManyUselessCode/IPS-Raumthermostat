@@ -105,7 +105,7 @@ $aktion = new ReflectionMethod($modul, 'ZeitplanAktion');
 
 $anlegen->invoke($modul);
 $gruppen = $EREIGNIS['ScheduleGroups'];
-pruefe($EREIGNIS['Active'] === true, 'Zeitplan aktiv');
+pruefe($EREIGNIS['Active'] === false, 'Zeitplan startet inaktiv');
 pruefe(count($gruppen) === 7, 'sieben Gruppen');
 $alle = 0;
 foreach ($gruppen as $nr => $gruppe) {
